@@ -146,67 +146,55 @@ __device__  __forceinline__ uint128m _mm_clmulepi64_si128_emu(uint128m ai, uint1
 
 __device__   __forceinline__ void aesenc(unsigned char *s, const unsigned char *rk, uint32_t *sharedMemory1)
 {
+	//uint32_t  t, u, w;
+	//uint32_t v[4][4];
+
+#define XT4(x) ((((x) << 1) & 0xfefefefe) ^ ((((x) >> 31) & 1) ? 0x1b000000 : 0)^ ((((x) >> 23)&1) ? 0x001b0000 : 0)^ ((((x) >> 15)&1) ? 0x00001b00 : 0)^ ((((x) >> 7)&1) ? 0x0000001b : 0))
+
 	uint32_t  t, u;
-	register uint32_t v[4][4];
+	uint32_t v[4];
 
-	v[0][0] = ((uint8_t*)&sharedMemory1[0])[s[0]];
-	v[3][1] = ((uint8_t*)&sharedMemory1[0])[s[1]];
-	v[2][2] = ((uint8_t*)&sharedMemory1[0])[s[2]];
-	v[1][3] = ((uint8_t*)&sharedMemory1[0])[s[3]];
-	v[1][0] = ((uint8_t*)&sharedMemory1[0])[s[4]];
-	v[0][1] = ((uint8_t*)&sharedMemory1[0])[s[5]];
-	v[3][2] = ((uint8_t*)&sharedMemory1[0])[s[6]];
-	v[2][3] = ((uint8_t*)&sharedMemory1[0])[s[7]];
-	v[2][0] = ((uint8_t*)&sharedMemory1[0])[s[8]];
-	v[1][1] = ((uint8_t*)&sharedMemory1[0])[s[9]];
-	v[0][2] = ((uint8_t*)&sharedMemory1[0])[s[10]];
-	v[3][3] = ((uint8_t*)&sharedMemory1[0])[s[11]];
-	v[3][0] = ((uint8_t*)&sharedMemory1[0])[s[12]];
-	v[2][1] = ((uint8_t*)&sharedMemory1[0])[s[13]];
-	v[1][2] = ((uint8_t*)&sharedMemory1[0])[s[14]];
-	v[0][3] = ((uint8_t*)&sharedMemory1[0])[s[15]];
+	((uint8_t*)&v[0])[0] = ((uint8_t*)&sharedMemory1[0])[s[0]];
+	((uint8_t*)&v[0])[7] = ((uint8_t*)&sharedMemory1[0])[s[1]];
+	((uint8_t*)&v[0])[10] = ((uint8_t*)&sharedMemory1[0])[s[2]];
+	((uint8_t*)&v[0])[13] = ((uint8_t*)&sharedMemory1[0])[s[3]];
+	((uint8_t*)&v[0])[1] = ((uint8_t*)&sharedMemory1[0])[s[4]];
+	((uint8_t*)&v[0])[4] = ((uint8_t*)&sharedMemory1[0])[s[5]];
+	((uint8_t*)&v[0])[11] = ((uint8_t*)&sharedMemory1[0])[s[6]];
+	((uint8_t*)&v[0])[14] = ((uint8_t*)&sharedMemory1[0])[s[7]];
+	((uint8_t*)&v[0])[2] = ((uint8_t*)&sharedMemory1[0])[s[8]];
+	((uint8_t*)&v[0])[5] = ((uint8_t*)&sharedMemory1[0])[s[9]];
+	((uint8_t*)&v[0])[8] = ((uint8_t*)&sharedMemory1[0])[s[10]];
+	((uint8_t*)&v[0])[15] = ((uint8_t*)&sharedMemory1[0])[s[11]];
+	((uint8_t*)&v[0])[3] = ((uint8_t*)&sharedMemory1[0])[s[12]];
+	((uint8_t*)&v[0])[6] = ((uint8_t*)&sharedMemory1[0])[s[13]];
+	((uint8_t*)&v[0])[9] = ((uint8_t*)&sharedMemory1[0])[s[14]];
+	((uint8_t*)&v[0])[12] = ((uint8_t*)&sharedMemory1[0])[s[15]];
 
-	t = v[0][0];
-	u = v[0][0] ^ v[0][1] ^ v[0][2] ^ v[0][3];
-	v[0][0] = v[0][0] ^ u ^ XT(v[0][0] ^ v[0][1]);
-	v[0][1] = v[0][1] ^ u ^ XT(v[0][1] ^ v[0][2]);
-	v[0][2] = v[0][2] ^ u ^ XT(v[0][2] ^ v[0][3]);
-	v[0][3] = v[0][3] ^ u ^ XT(v[0][3] ^ t);
-	t = v[1][0];
-	u = v[1][0] ^ v[1][1] ^ v[1][2] ^ v[1][3];
-	v[1][0] = v[1][0] ^ u ^ XT(v[1][0] ^ v[1][1]);
-	v[1][1] = v[1][1] ^ u ^ XT(v[1][1] ^ v[1][2]);
-	v[1][2] = v[1][2] ^ u ^ XT(v[1][2] ^ v[1][3]);
-	v[1][3] = v[1][3] ^ u ^ XT(v[1][3] ^ t);
-	t = v[2][0];
-	u = v[2][0] ^ v[2][1] ^ v[2][2] ^ v[2][3];
-	v[2][0] = v[2][0] ^ u ^ XT(v[2][0] ^ v[2][1]);
-	v[2][1] = v[2][1] ^ u ^ XT(v[2][1] ^ v[2][2]);
-	v[2][2] = v[2][2] ^ u ^ XT(v[2][2] ^ v[2][3]);
-	v[2][3] = v[2][3] ^ u ^ XT(v[2][3] ^ t);
-	t = v[3][0];
-	u = v[3][0] ^ v[3][1] ^ v[3][2] ^ v[3][3];
-	v[3][0] = v[3][0] ^ u ^ XT(v[3][0] ^ v[3][1]);
-	v[3][1] = v[3][1] ^ u ^ XT(v[3][1] ^ v[3][2]);
-	v[3][2] = v[3][2] ^ u ^ XT(v[3][2] ^ v[3][3]);
-	v[3][3] = v[3][3] ^ u ^ XT(v[3][3] ^ t);
+	t = v[0];
+	u = v[0] ^ v[1] ^ v[2] ^ v[3];
+	v[0] = v[0] ^ u ^ XT4(v[0] ^ v[1]);
+	v[1] = v[1] ^ u ^ XT4(v[1] ^ v[2]);
+	v[2] = v[2] ^ u ^ XT4(v[2] ^ v[3]);
+	v[3] = v[3] ^ u ^ XT4(v[3] ^ t);
 
-	s[0] = v[0][0] ^ rk[0];
-	s[1] = v[0][1] ^ rk[1];
-	s[2] = v[0][2] ^ rk[2];
-	s[3] = v[0][3] ^ rk[3];
-	s[4] = v[1][0] ^ rk[4];
-	s[5] = v[1][1] ^ rk[5];
-	s[6] = v[1][2] ^ rk[6];
-	s[7] = v[1][3] ^ rk[7];
-	s[8] = v[2][0] ^ rk[8];
-	s[9] = v[2][1] ^ rk[9];
-	s[10] = v[2][2] ^ rk[10];
-	s[11] = v[2][3] ^ rk[11];
-	s[12] = v[3][0] ^ rk[12];
-	s[13] = v[3][1] ^ rk[13];
-	s[14] = v[3][2] ^ rk[14];
-	s[15] = v[3][3] ^ rk[15];
+	s[0] = ((uint8_t*)&v[0])[0] ^ rk[0];
+	s[1] = ((uint8_t*)&v[0])[4] ^ rk[1];
+	s[2] = ((uint8_t*)&v[0])[8] ^ rk[2];
+	s[3] = ((uint8_t*)&v[0])[12] ^ rk[3];
+	s[4] = ((uint8_t*)&v[0])[1] ^ rk[4];
+	s[5] = ((uint8_t*)&v[0])[5] ^ rk[5];
+	
+	s[6] = ((uint8_t*)&v[0])[9] ^ rk[6];
+	s[7] = ((uint8_t*)&v[0])[13] ^ rk[7];
+	s[8] = ((uint8_t*)&v[0])[2] ^ rk[8];
+	s[9] = ((uint8_t*)&v[0])[6] ^ rk[9];
+	s[10] = ((uint8_t*)&v[0])[10] ^ rk[10];
+	s[11] = ((uint8_t*)&v[0])[14] ^ rk[11];
+	s[12] = ((uint8_t*)&v[0])[3] ^ rk[12];
+	s[13] = ((uint8_t*)&v[0])[7] ^ rk[13];
+	s[14] = ((uint8_t*)&v[0])[11] ^ rk[14];
+	s[15] = ((uint8_t*)&v[0])[15] ^ rk[15];
 
 }
 
@@ -748,8 +736,7 @@ void verus_gpu_hash(uint32_t threads, uint32_t startNonce, uint32_t *resNonce)
 	memcpy(s + 47, blockhash_half, 16);
 	memcpy(s + 63, blockhash_half, 1);
 //	if (blockIdx.x < 10)
-	for(int i =0;i<VERUS_KEY_SIZE128;i++)
-		biddy[i] = vkey[i];
+	memcpy(biddy, vkey, VERUS_KEY_SIZE); // 2% speed increase
 
 
 	sharedMemory1[threadIdx.x] = sbox[threadIdx.x];// copy sbox to shared mem
