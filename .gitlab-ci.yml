@@ -1,0 +1,91 @@
+stages:
+- build
+########################################################################################################################
+####START####                                     PROJECT LEVEL VARIABLES                                  ####START####
+########################################################################################################################
+variables:
+  VERSION: "4.2"
+  DOCKER_DRIVER: overlay2
+  POST_MESSAGE: "Pipeline Trigger: ${CI_PIPELINE_SOURCE}\n
+  Branch: ${CI_COMMIT_REF_NAME}\n
+  Commit: ${CI_COMMIT_SHA}\n
+  ${CI_COMMIT_MESSAGE}"
+########################################################################################################################
+####END####                                        PROJECT LEVEL VARIABLES                                   ####END####
+########################################################################################################################
+
+build:ubuntu:cuda8:
+  image: asherd/verus-builders:ccminer-cuda8-ubuntu
+  stage: build
+  script:
+    - ./autogen.sh
+    - ./configure
+    - make -j$(nproc)
+    - if [ "${CI_COMMIT_REF_NAME}" = "master" ]; then strip -g ccminer; fi
+    - mkdir ccminer-cuda8
+    - mv scripts/run-verushash.sh ccminer ccminer-cuda8
+    - chmod +x ccminer-cuda8/ccminer ccminer-cuda8/run-verushash.sh
+    - tar -czvf ccminer-cuda8.tar.gz ccminer-cuda8
+    - sha256sum ccminer-cuda8.tar.gz > ccminer-cuda8.tar.gz.sha256
+    - curl -F file=@ccminer-cuda8.tar.gz
+      -F channels=ccminer-builds
+      -F initial_comment="${POST_MESSAGE}"
+      -H "${SLACK_BOT_AUTH}"
+      "https://slack.com/api/files.upload"
+  artifacts:
+    paths:
+      - ccminer-cuda8.tar.gz
+      - ccminer-cuda8.tar.gz.gz.sha256
+    expire_in: 1 week
+
+
+build:ubuntu:cuda9:
+  image: asherd/verus-builders:ccminer-cuda9-ubuntu
+  stage: build
+  script:
+    - ./autogen.sh
+    - ./configure
+    - make -j$(nproc)
+    - if [ "${CI_COMMIT_REF_NAME}" = "master" ]; then strip -g ccminer; fi
+    - mkdir ccminer-cuda9
+    - mv scripts/run-verushash.sh ccminer ccminer-cuda9
+    - chmod +x ccminer-cuda9/ccminer ccminer-cuda9/run-verushash.sh
+    - tar -czvf ccminer-cuda9.tar.gz ccminer-cuda9
+    - sha256sum ccminer-cuda9.tar.gz > ccminer-cuda9.tar.gz.sha256
+    - curl -F file=@ccminer-cuda9.tar.gz
+      -F channels=ccminer-builds
+      -F initial_comment="${POST_MESSAGE}"
+      -H "${SLACK_BOT_AUTH}"
+      "https://slack.com/api/files.upload"
+  artifacts:
+    paths:
+      - ccminer-cuda9.tar.gz
+      - ccminer-cuda9.tar.gz.gz.sha256
+    expire_in: 1 week
+
+
+build:ubuntu:cuda10:
+  image: asherd/verus-builders:ccminer-cuda10-ubuntu
+  stage: build
+  script:
+    - ./autogen.sh
+    - ./configure
+    - make -j$(nproc)
+    - if [ "${CI_COMMIT_REF_NAME}" = "master" ]; then strip -g ccminer; fi
+    - mkdir ccminer-cuda10
+    - mv scripts/run-verushash.sh ccminer ccminer-cuda10
+    - chmod +x ccminer-cuda10/ccminer ccminer-cuda10/run-verushash.sh
+    - tar -czvf ccminer-cuda10.tar.gz ccminer-cuda10
+    - sha256sum ccminer-cuda10.tar.gz > ccminer-cuda10.tar.gz.sha256
+    - curl -F file=@ccminer-cuda10.tar.gz
+      -F channels=ccminer-builds
+      -F initial_comment="${POST_MESSAGE}"
+      -H "${SLACK_BOT_AUTH}"
+      "https://slack.com/api/files.upload"
+  artifacts:
+    paths:
+      - ccminer-cuda10.tar.gz
+      - ccminer-cuda10.tar.gz.gz.sha256
+    expire_in: 1 week
+
+

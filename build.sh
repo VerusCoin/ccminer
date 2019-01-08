@@ -11,6 +11,10 @@ rm -f config.status
 ./autogen.sh || echo done
 
 # CFLAGS="-O2" ./configure
-./configure.sh
+./configure
 
-make -j 4
+if [[ "$OSTYPE" == "darwin"* ]]; then
+make -j$(sysctl -n hw.physicalcpu)
+else
+make -j$(nproc)
+fi
