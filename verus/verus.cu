@@ -55,21 +55,24 @@ __device__ const uint32_t sbox[] = {
 };
 
 #define XT(x) (((x) << 1) ^ (((x) >> 7) ? 0x1b : 0))
-__global__ void verus_gpu_hash(uint32_t threads, uint32_t startNonce, uint32_t *resNonce);
+__global__ void verus_gpu_hash(uint32_t threads, uint32_t startNonce, uint32_t *resNonce, uint128m * d_key_input);
+__global__ void verus_extra_gpu_prepare(const uint32_t threads, uint128m * d_key_input);
 
 //__device__ __device__ uint128m local_key[THREADS][VERUS_KEY_SIZE128];
 static uint32_t *d_nonces[MAX_GPUS];
+static uint4 *d_long_keys[MAX_GPUS];
 
 __device__ __constant__ uint128m vkey[VERUS_KEY_SIZE128];
 __device__ __constant__ uint8_t blockhash_half[64];
 __device__ __constant__ uint32_t ptarget[8];
 
 __host__
-void verus_init(int thr_id)
+void verus_init(int thr_id, uint32_t throughput)
 {
 	CUDA_SAFE_CALL(cudaMalloc(&d_nonces[thr_id], 1 * sizeof(uint32_t)));
 	//CUDA_SAFE_CALL(cudaMalloc(&vkey[thr_id], VERUS_KEY_SIZE * sizeof(uint8_t)));
-	//CUDA_SAFE_CALL(cudaMalloc(&local_key[thr_id], THREADS * VERUS_KEY_SIZE * sizeof(uint8_t)));
+	CUDA_SAFE_CALL(cudaMalloc(&d_long_keys[thr_id], throughput * VERUS_KEY_SIZE));
+	printf("thoughput: %d\n", throughput);
 };
 
 
@@ -90,10 +93,12 @@ void verus_hash(int thr_id, uint32_t threads, uint32_t startNonce, uint32_t *res
 	const uint32_t threadsperblock = THREADS;
 
 	dim3 grid((threads + threadsperblock - 1) / threadsperblock);
+	dim3 grid2(threads);
 	dim3 block(threadsperblock);
+	verus_extra_gpu_prepare << <grid2, block >> > (threads, d_long_keys[thr_id]); //setup global mem with lots of keys
+	//CUDA_SAFE_CALL(cudaThreadSynchronize());
 
-	verus_gpu_hash << <grid, block >> >(threads, startNonce, d_nonces[thr_id]);
-	CUDA_SAFE_CALL(cudaThreadSynchronize());
+	verus_gpu_hash << <grid, block >> >(threads, startNonce, d_nonces[thr_id], d_long_keys[thr_id]);
 	CUDA_SAFE_CALL(cudaMemcpy(resNonces, d_nonces[thr_id], 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
 	//memcpy(resNonces, h_nonces[thr_id], NBN * sizeof(uint32_t));
 
@@ -146,55 +151,67 @@ __device__  __forceinline__ uint128m _mm_clmulepi64_si128_emu(uint128m ai, uint1
 
 __device__   __forceinline__ void aesenc(unsigned char *s, const unsigned char *rk, uint32_t *sharedMemory1)
 {
-	//uint32_t  t, u, w;
-	//uint32_t v[4][4];
-
-#define XT4(x) ((((x) << 1) & 0xfefefefe) ^ ((((x) >> 31) & 1) ? 0x1b000000 : 0)^ ((((x) >> 23)&1) ? 0x001b0000 : 0)^ ((((x) >> 15)&1) ? 0x00001b00 : 0)^ ((((x) >> 7)&1) ? 0x0000001b : 0))
-
 	uint32_t  t, u;
-	uint32_t v[4];
+	register uint32_t v[4][4];
 
-	((uint8_t*)&v[0])[0] = ((uint8_t*)&sharedMemory1[0])[s[0]];
-	((uint8_t*)&v[0])[7] = ((uint8_t*)&sharedMemory1[0])[s[1]];
-	((uint8_t*)&v[0])[10] = ((uint8_t*)&sharedMemory1[0])[s[2]];
-	((uint8_t*)&v[0])[13] = ((uint8_t*)&sharedMemory1[0])[s[3]];
-	((uint8_t*)&v[0])[1] = ((uint8_t*)&sharedMemory1[0])[s[4]];
-	((uint8_t*)&v[0])[4] = ((uint8_t*)&sharedMemory1[0])[s[5]];
-	((uint8_t*)&v[0])[11] = ((uint8_t*)&sharedMemory1[0])[s[6]];
-	((uint8_t*)&v[0])[14] = ((uint8_t*)&sharedMemory1[0])[s[7]];
-	((uint8_t*)&v[0])[2] = ((uint8_t*)&sharedMemory1[0])[s[8]];
-	((uint8_t*)&v[0])[5] = ((uint8_t*)&sharedMemory1[0])[s[9]];
-	((uint8_t*)&v[0])[8] = ((uint8_t*)&sharedMemory1[0])[s[10]];
-	((uint8_t*)&v[0])[15] = ((uint8_t*)&sharedMemory1[0])[s[11]];
-	((uint8_t*)&v[0])[3] = ((uint8_t*)&sharedMemory1[0])[s[12]];
-	((uint8_t*)&v[0])[6] = ((uint8_t*)&sharedMemory1[0])[s[13]];
-	((uint8_t*)&v[0])[9] = ((uint8_t*)&sharedMemory1[0])[s[14]];
-	((uint8_t*)&v[0])[12] = ((uint8_t*)&sharedMemory1[0])[s[15]];
+	v[0][0] = ((uint8_t*)&sharedMemory1[0])[s[0]];
+	v[3][1] = ((uint8_t*)&sharedMemory1[0])[s[1]];
+	v[2][2] = ((uint8_t*)&sharedMemory1[0])[s[2]];
+	v[1][3] = ((uint8_t*)&sharedMemory1[0])[s[3]];
+	v[1][0] = ((uint8_t*)&sharedMemory1[0])[s[4]];
+	v[0][1] = ((uint8_t*)&sharedMemory1[0])[s[5]];
+	v[3][2] = ((uint8_t*)&sharedMemory1[0])[s[6]];
+	v[2][3] = ((uint8_t*)&sharedMemory1[0])[s[7]];
+	v[2][0] = ((uint8_t*)&sharedMemory1[0])[s[8]];
+	v[1][1] = ((uint8_t*)&sharedMemory1[0])[s[9]];
+	v[0][2] = ((uint8_t*)&sharedMemory1[0])[s[10]];
+	v[3][3] = ((uint8_t*)&sharedMemory1[0])[s[11]];
+	v[3][0] = ((uint8_t*)&sharedMemory1[0])[s[12]];
+	v[2][1] = ((uint8_t*)&sharedMemory1[0])[s[13]];
+	v[1][2] = ((uint8_t*)&sharedMemory1[0])[s[14]];
+	v[0][3] = ((uint8_t*)&sharedMemory1[0])[s[15]];
 
-	t = v[0];
-	u = v[0] ^ v[1] ^ v[2] ^ v[3];
-	v[0] = v[0] ^ u ^ XT4(v[0] ^ v[1]);
-	v[1] = v[1] ^ u ^ XT4(v[1] ^ v[2]);
-	v[2] = v[2] ^ u ^ XT4(v[2] ^ v[3]);
-	v[3] = v[3] ^ u ^ XT4(v[3] ^ t);
+	t = v[0][0];
+	u = v[0][0] ^ v[0][1] ^ v[0][2] ^ v[0][3];
+	v[0][0] = v[0][0] ^ u ^ XT(v[0][0] ^ v[0][1]);
+	v[0][1] = v[0][1] ^ u ^ XT(v[0][1] ^ v[0][2]);
+	v[0][2] = v[0][2] ^ u ^ XT(v[0][2] ^ v[0][3]);
+	v[0][3] = v[0][3] ^ u ^ XT(v[0][3] ^ t);
+	t = v[1][0];
+	u = v[1][0] ^ v[1][1] ^ v[1][2] ^ v[1][3];
+	v[1][0] = v[1][0] ^ u ^ XT(v[1][0] ^ v[1][1]);
+	v[1][1] = v[1][1] ^ u ^ XT(v[1][1] ^ v[1][2]);
+	v[1][2] = v[1][2] ^ u ^ XT(v[1][2] ^ v[1][3]);
+	v[1][3] = v[1][3] ^ u ^ XT(v[1][3] ^ t);
+	t = v[2][0];
+	u = v[2][0] ^ v[2][1] ^ v[2][2] ^ v[2][3];
+	v[2][0] = v[2][0] ^ u ^ XT(v[2][0] ^ v[2][1]);
+	v[2][1] = v[2][1] ^ u ^ XT(v[2][1] ^ v[2][2]);
+	v[2][2] = v[2][2] ^ u ^ XT(v[2][2] ^ v[2][3]);
+	v[2][3] = v[2][3] ^ u ^ XT(v[2][3] ^ t);
+	t = v[3][0];
+	u = v[3][0] ^ v[3][1] ^ v[3][2] ^ v[3][3];
+	v[3][0] = v[3][0] ^ u ^ XT(v[3][0] ^ v[3][1]);
+	v[3][1] = v[3][1] ^ u ^ XT(v[3][1] ^ v[3][2]);
+	v[3][2] = v[3][2] ^ u ^ XT(v[3][2] ^ v[3][3]);
+	v[3][3] = v[3][3] ^ u ^ XT(v[3][3] ^ t);
 
-	s[0] = ((uint8_t*)&v[0])[0] ^ rk[0];
-	s[1] = ((uint8_t*)&v[0])[4] ^ rk[1];
-	s[2] = ((uint8_t*)&v[0])[8] ^ rk[2];
-	s[3] = ((uint8_t*)&v[0])[12] ^ rk[3];
-	s[4] = ((uint8_t*)&v[0])[1] ^ rk[4];
-	s[5] = ((uint8_t*)&v[0])[5] ^ rk[5];
-	
-	s[6] = ((uint8_t*)&v[0])[9] ^ rk[6];
-	s[7] = ((uint8_t*)&v[0])[13] ^ rk[7];
-	s[8] = ((uint8_t*)&v[0])[2] ^ rk[8];
-	s[9] = ((uint8_t*)&v[0])[6] ^ rk[9];
-	s[10] = ((uint8_t*)&v[0])[10] ^ rk[10];
-	s[11] = ((uint8_t*)&v[0])[14] ^ rk[11];
-	s[12] = ((uint8_t*)&v[0])[3] ^ rk[12];
-	s[13] = ((uint8_t*)&v[0])[7] ^ rk[13];
-	s[14] = ((uint8_t*)&v[0])[11] ^ rk[14];
-	s[15] = ((uint8_t*)&v[0])[15] ^ rk[15];
+	s[0] = v[0][0] ^ rk[0];
+	s[1] = v[0][1] ^ rk[1];
+	s[2] = v[0][2] ^ rk[2];
+	s[3] = v[0][3] ^ rk[3];
+	s[4] = v[1][0] ^ rk[4];
+	s[5] = v[1][1] ^ rk[5];
+	s[6] = v[1][2] ^ rk[6];
+	s[7] = v[1][3] ^ rk[7];
+	s[8] = v[2][0] ^ rk[8];
+	s[9] = v[2][1] ^ rk[9];
+	s[10] = v[2][2] ^ rk[10];
+	s[11] = v[2][3] ^ rk[11];
+	s[12] = v[3][0] ^ rk[12];
+	s[13] = v[3][1] ^ rk[13];
+	s[14] = v[3][2] ^ rk[14];
+	s[15] = v[3][3] ^ rk[15];
 
 }
 
@@ -717,11 +734,11 @@ __device__  __forceinline__ uint64_t precompReduction64(uint128m A) {
 	return _mm_cvtsi128_si64_emu(tmp);
 }
 
-__global__ __launch_bounds__(THREADS, 2)
-void verus_gpu_hash(uint32_t threads, uint32_t startNonce, uint32_t *resNonce)
+__global__ __launch_bounds__(THREADS, 1)
+void verus_gpu_hash(uint32_t threads, uint32_t startNonce, uint32_t *resNonce, uint128m * d_key_input)
 {
 	uint32_t thread = (blockDim.x * blockIdx.x + threadIdx.x);
-	uint128m mid, biddy[VERUS_KEY_SIZE128];
+	uint128m mid; // , biddy[VERUS_KEY_SIZE128];
 	int i;
 	uint8_t s[64];
 	uint32_t nounce = startNonce + thread, hash[32] = { 0 };
@@ -736,7 +753,8 @@ void verus_gpu_hash(uint32_t threads, uint32_t startNonce, uint32_t *resNonce)
 	memcpy(s + 47, blockhash_half, 16);
 	memcpy(s + 63, blockhash_half, 1);
 //	if (blockIdx.x < 10)
-	memcpy(biddy, vkey, VERUS_KEY_SIZE); // 2% speed increase
+	//for(int i =0;i<VERUS_KEY_SIZE128;i++)
+	//	biddy[i] = vkey[i];
 
 
 	sharedMemory1[threadIdx.x] = sbox[threadIdx.x];// copy sbox to shared mem
@@ -748,7 +766,7 @@ void verus_gpu_hash(uint32_t threads, uint32_t startNonce, uint32_t *resNonce)
 	((uint64_t *)&lazy)[0] = 0x0000000000010000ull;
 	((uint64_t *)&lazy)[1] = 0x0000000000000000ull;
 	__syncthreads();
-	mid = __verusclmulwithoutreduction64alignedrepeatgpu(biddy, (uint128m*)s, 8191, sharedMemory1);
+	mid = __verusclmulwithoutreduction64alignedrepeatgpu(&d_key_input[VERUS_KEY_SIZE128 * thread], (uint128m*)s, 8191, sharedMemory1);
 
 	mid = _mm_xor_si128_emu(mid, lazy);
 
@@ -763,8 +781,14 @@ void verus_gpu_hash(uint32_t threads, uint32_t startNonce, uint32_t *resNonce)
 	
 	//haraka512_port_keyed((unsigned char*)hash, (const unsigned char*)s, (const unsigned char*)(biddy + mask), sharedMemory1, nounce);
 
-	haraka512_port_keyed2222((unsigned char*)hash, (const unsigned char*)s, (biddy + mask), sharedMemory1,nounce);
+	haraka512_port_keyed2222((unsigned char*)hash, (const unsigned char*)s, (&d_key_input[VERUS_KEY_SIZE128 * thread] + mask), sharedMemory1,nounce);
+#ifdef GPU_DEBUGg
+	if (threadIdx.x == (blockIdx.x % 100))
+	{
 
+		printf("[GPU]verus_extra_gpu_final::hash i to final hararxa %dx%d    :%x \n", threadIdx.x, blockIdx.x, hash[7]);
+	}
+#endif	
 	if (hash[7] < ptarget[7]) { 
 		
 		resNonce[0] = nounce;
@@ -775,3 +799,22 @@ void verus_gpu_hash(uint32_t threads, uint32_t startNonce, uint32_t *resNonce)
 
 	//__syncthreads();
 };
+
+__global__ __launch_bounds__(128, 1)
+void verus_extra_gpu_prepare(const uint32_t threads, uint128m * d_key_input)
+{
+
+	d_key_input[(blockIdx.x * VERUS_KEY_SIZE128) + threadIdx.x] = vkey[threadIdx.x];
+	d_key_input[(blockIdx.x * VERUS_KEY_SIZE128) + threadIdx.x + 128] = vkey[threadIdx.x + 128];
+	d_key_input[(blockIdx.x * VERUS_KEY_SIZE128) + threadIdx.x + 256] = vkey[threadIdx.x + 256];
+	d_key_input[(blockIdx.x * VERUS_KEY_SIZE128) + threadIdx.x + 384] = vkey[threadIdx.x + 384];
+	if (threadIdx.x < 40)
+		d_key_input[(blockIdx.x * VERUS_KEY_SIZE128) + threadIdx.x + 512] = vkey[threadIdx.x + 512];
+
+	//	__syncthreads();
+
+	//memcpy(&d_key_input[thread * VERUS_KEY_SIZE128], vkey, VERUS_KEY_SIZE);
+
+
+
+}
