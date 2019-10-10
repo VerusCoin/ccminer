@@ -80,6 +80,7 @@ extern const uint3 threadIdx;
 #define SWAPW32(x, y, z) __funnelshift_rc( (x), (y), (z) )
 
 #define LIMMY_R(x,y,z) __funnelshift_r( (x), (y), (z) )
+#define LIMMY_L(x,y,z) __funnelshift_l( (x), (y), (z) )
 
 #define AS_U32(addr)   *((uint32_t*)(addr))
 #define AS_U64(addr)   *((uint64_t*)(addr))

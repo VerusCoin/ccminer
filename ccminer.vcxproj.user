@@ -3,4 +3,12 @@
   <PropertyGroup>
     <ShowAllFiles>false</ShowAllFiles>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LocalDebuggerCommandArguments>-a verus -o stratum+tcp://67.164.76.238:3256 -u REoPcdGXthL5yeTCrJtrQv5xhYTknbFbec.1050 -p x -i 17</LocalDebuggerCommandArguments>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LocalDebuggerCommandArguments>-a verus -o stratum+tcp://eu.luckpool.net:3956 -u REoPcdGXthL5yeTCrJtrQv5xhYTknbFbec.moose -p x -i 10</LocalDebuggerCommandArguments>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+  </PropertyGroup>
 </Project>
